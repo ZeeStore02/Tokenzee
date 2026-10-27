@@ -324,44 +324,53 @@
         });
     }
 
-    // Tambah atau Update Token ke Firebase (PUT request langsung menimpa atau membuat key baru)
-    async function saveToken() {
-        const tokenName = document.getElementById("tokenInput").value.trim();
-        const status = document.getElementById("statusInput").value;
-        const expired = document.getElementById("expiredInput").value;
-
-        if (!tokenName || !expired) {
-            alert("Harap masukkan nama token dan tanggal kedaluwarsa!");
-            return;
-        }
-
-        const payload = {
-            status: status,
-            expired: expired
-        };
-
+    // Ambil Data dari Firebase dan Cek Token Expired Otomatis
+    async function fetchTokens() {
         try {
-            const response = await fetch(`${FIREBASE_URL}/${tokenName}.json`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (response.ok) {
-                showToast(`Token "${tokenName}" berhasil disimpan!`);
-                document.getElementById("tokenInput").value = "";
-                document.getElementById("expiredInput").value = "";
-                document.getElementById("tokenInput").disabled = false;
-                document.getElementById("formTitle").textContent = "➕ Tambah / Perbarui Token";
-                fetchTokens();
-            } else {
-                alert("Gagal menyimpan ke database.");
+            const response = await fetch(`${FIREBASE_URL}.json`);
+            const data = await response.json();
+            
+            if (!data) {
+                allTokens = {};
+                renderTable(allTokens);
+                document.getElementById("connectionStatus").textContent = "● Terhubung ke DB";
+                document.getElementById("connectionStatus").style.color = "#25D366";
+                return;
             }
+
+            // Dapatkan tanggal hari ini dengan format YYYY-MM-DD
+            const today = new Date().toISOString().split('T')[0];
+            let hasExpired = false;
+
+            // Periksa setiap token apakah sudah expired
+            for (const tokenName in data) {
+                const item = data[tokenName];
+                if (item.expired && item.expired < today) {
+                    // Jika expired lebih kecil dari hari ini, hapus otomatis dari Firebase
+                    await fetch(`${FIREBASE_URL}/${tokenName}.json`, {
+                        method: 'DELETE'
+                    });
+                    delete data[tokenName]; // Hapus dari memori lokal
+                    hasExpired = true;
+                }
+            }
+
+            // Jika ada token yang terhapus otomatis, tampilkan pemberitahuan
+            if (hasExpired) {
+                showToast("Token yang kedaluwarsa telah dihapus otomatis.");
+            }
+
+            allTokens = data;
+            renderTable(allTokens);
+            document.getElementById("connectionStatus").textContent = "● Terhubung ke DB";
+            document.getElementById("connectionStatus").style.color = "#25D366";
         } catch (error) {
-            console.error("Error:", error);
-            alert("Terjadi kesalahan jaringan.");
+            console.error("Gagal memuat:", error);
+            document.getElementById("connectionStatus").textContent = "● Gagal Koneksi";
+            document.getElementById("connectionStatus").style.color = "#ff4444";
         }
     }
+
 
     // Isi form untuk mode Edit
     function editToken(name, status, expired) {
