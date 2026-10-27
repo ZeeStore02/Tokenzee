@@ -1,2 +1,0 @@
-# Tokenzee
-Daftar token script
