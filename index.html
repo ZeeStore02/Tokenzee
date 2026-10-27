@@ -297,7 +297,7 @@
         }
     }
 
-    // Tampilkan Data ke Tabel
+    // Tampilkan Data ke Tabel dengan Pengurutan (Tanggal Terdekat -> Paling Lama)
     function renderTable(tokens) {
         const tbody = document.getElementById("tokenTableBody");
         tbody.innerHTML = "";
@@ -307,6 +307,13 @@
             tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: #b0c4de;">Belum ada token tersimpan.</td></tr>`;
             return;
         }
+
+        // Urutkan key berdasarkan tanggal expired (Terdekat/Beberapa hari -> Paling Lama)
+        keys.sort((a, b) => {
+            const dateA = new Date(tokens[a].expired || '9999-12-31');
+            const dateB = new Date(tokens[b].expired || '9999-12-31');
+            return dateA - dateB; // Dari tanggal yang paling cepat/dekat ke paling lama
+        });
 
         keys.forEach(tokenName => {
             const item = tokens[tokenName];
