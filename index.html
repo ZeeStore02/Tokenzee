@@ -404,31 +404,38 @@
         }
     }
 
-    // --- LOGIKA TOKENS ---
-    function renderTokens(tokens) {
-        const tbody = document.getElementById("tokenTableBody");
-        tbody.innerHTML = "";
-        const keys = Object.keys(tokens);
+// LOGIKA TOKENS (Sudah Diurutkan Berdasarkan Tanggal Expired Terdekat -> Terjauh)
+function renderTokens(tokens) {
+    const tbody = document.getElementById("tokenTableBody");
+    tbody.innerHTML = "";
+    const keys = Object.keys(tokens);
 
-        if (keys.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Tidak ada token.</td></tr>`;
-            return;
-        }
-
-        keys.forEach(k => {
-            const item = tokens[k];
-            tbody.innerHTML += `
-                <tr>
-                    <td style="font-weight:bold; color:#00f0ff;">${k}</td>
-                    <td><span class="badge ${item.status}">${item.status.toUpperCase()}</span></td>
-                    <td>${item.expired}</td>
-                    <td style="text-align:center;">
-                        <button class="btn btn-danger" onclick="deleteNode('tokens/${k}')">Hapus</button>
-                    </td>
-                </tr>
-            `;
-        });
+    if (keys.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Tidak ada token.</td></tr>`;
+        return;
     }
+
+    // Urutkan key berdasarkan tanggal expired dari yang terdekat ke yang paling lama
+    keys.sort((a, b) => {
+        const dateA = new Date(tokens[a].expired || '9999-12-31');
+        const dateB = new Date(tokens[b].expired || '9999-12-31');
+        return dateA - dateB;
+    });
+
+    keys.forEach(k => {
+        const item = tokens[k];
+        tbody.innerHTML += `
+            <tr>
+                <td style="font-weight:bold; color:#00f0ff;">${k}</td>
+                <td><span class="badge ${item.status}">${item.status.toUpperCase()}</span></td>
+                <td>${item.expired}</td>
+                <td style="text-align:center;">
+                    <button class="btn btn-danger" onclick="deleteNode('tokens/${k}')">Hapus</button>
+                </td>
+            </tr>
+        `;
+    });
+}
 
     async function saveToken() {
         const name = document.getElementById("tokenInput").value.trim();
