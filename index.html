@@ -64,10 +64,12 @@
             display: flex;
             gap: 10px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
 
         .tab-btn {
             flex: 1;
+            min-width: 140px;
             padding: 12px;
             background: rgba(3, 15, 30, 0.8);
             border: 1px solid rgba(0, 240, 255, 0.3);
@@ -266,9 +268,10 @@
 
     <!-- TABS KHUSUS PENGELOLAAN FIREBASE -->
     <div class="tabs">
-        <div class="tab-btn active" onclick="switchTab('tokensTab')">🔑 Kelola Tokens</div>
-        <div class="tab-btn" onclick="switchTab('buyersTab')">👤 Kelola Buyers</div>
-        <div class="tab-btn" onclick="switchTab('claimsTab')">📱 Kelola Free Claims</div>
+        <div class="tab-btn active" onclick="switchTab('tokensTab', event)">🔑 Kelola Tokens</div>
+        <div class="tab-btn" onclick="switchTab('buyersTab', event)">👤 Kelola Buyers</div>
+        <div class="tab-btn" onclick="switchTab('claimsTab', event)">📱 Kelola Free Claims</div>
+        <div class="tab-btn" onclick="switchTab('chatsTab', event)">💬 Kelola Chats</div>
     </div>
 
     <!-- TAB 1: KELOLA TOKENS -->
@@ -365,6 +368,31 @@
             </div>
         </div>
     </div>
+
+    <!-- TAB 4: KELOLA CHATS / KOMENTAR MEMBER -->
+    <div id="chatsTab" class="tab-content">
+        <div class="panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 style="margin:0;">💬 Daftar Node /chats/</h3>
+                <button class="btn btn-danger" onclick="clearAllChats()">🔥 Hapus Semua Chat</button>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Pengirim</th>
+                            <th>Pesan</th>
+                            <th>Waktu</th>
+                            <th style="text-align: center;">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="chatTableBody">
+                        <tr><td colspan="4" style="text-align: center;">Memuat data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div id="toast">Berhasil disimpan!</div>
@@ -379,11 +407,13 @@
         setTimeout(() => { t.className = ""; }, 2500);
     }
 
-    function switchTab(tabId) {
+    function switchTab(tabId, evt) {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
         
-        event.target.classList.add('active');
+        if (evt && evt.target) {
+            evt.target.classList.add('active');
+        }
         document.getElementById(tabId).classList.add('active');
     }
 
@@ -398,44 +428,44 @@
             renderTokens(data.tokens || {});
             renderBuyers(data.buyers || {});
             renderClaims(data.free_claims || {});
+            renderChats(data.chats || {});
         } catch (e) {
             document.getElementById("connectionStatus").textContent = "● Gagal Koneksi";
             document.getElementById("connectionStatus").style.color = "#ff4444";
         }
     }
 
-// LOGIKA TOKENS (Sudah Diurutkan Berdasarkan Tanggal Expired Terdekat -> Terjauh)
-function renderTokens(tokens) {
-    const tbody = document.getElementById("tokenTableBody");
-    tbody.innerHTML = "";
-    const keys = Object.keys(tokens);
+    // LOGIKA TOKENS
+    function renderTokens(tokens) {
+        const tbody = document.getElementById("tokenTableBody");
+        tbody.innerHTML = "";
+        const keys = Object.keys(tokens);
 
-    if (keys.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Tidak ada token.</td></tr>`;
-        return;
+        if (keys.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Tidak ada token.</td></tr>`;
+            return;
+        }
+
+        keys.sort((a, b) => {
+            const dateA = new Date(tokens[a].expired || '9999-12-31');
+            const dateB = new Date(tokens[b].expired || '9999-12-31');
+            return dateA - dateB;
+        });
+
+        keys.forEach(k => {
+            const item = tokens[k];
+            tbody.innerHTML += `
+                <tr>
+                    <td style="font-weight:bold; color:#00f0ff;">${k}</td>
+                    <td><span class="badge ${item.status}">${item.status.toUpperCase()}</span></td>
+                    <td>${item.expired}</td>
+                    <td style="text-align:center;">
+                        <button class="btn btn-danger" onclick="deleteNode('tokens/${k}')">Hapus</button>
+                    </td>
+                </tr>
+            `;
+        });
     }
-
-    // Urutkan key berdasarkan tanggal expired dari yang terdekat ke yang paling lama
-    keys.sort((a, b) => {
-        const dateA = new Date(tokens[a].expired || '9999-12-31');
-        const dateB = new Date(tokens[b].expired || '9999-12-31');
-        return dateA - dateB;
-    });
-
-    keys.forEach(k => {
-        const item = tokens[k];
-        tbody.innerHTML += `
-            <tr>
-                <td style="font-weight:bold; color:#00f0ff;">${k}</td>
-                <td><span class="badge ${item.status}">${item.status.toUpperCase()}</span></td>
-                <td>${item.expired}</td>
-                <td style="text-align:center;">
-                    <button class="btn btn-danger" onclick="deleteNode('tokens/${k}')">Hapus</button>
-                </td>
-            </tr>
-        `;
-    });
-}
 
     async function saveToken() {
         const name = document.getElementById("tokenInput").value.trim();
@@ -455,7 +485,7 @@ function renderTokens(tokens) {
         loadAllData();
     }
 
-    // --- LOGIKA BUYERS ---
+    // LOGIKA BUYERS
     function renderBuyers(buyers) {
         const tbody = document.getElementById("buyerTableBody");
         tbody.innerHTML = "";
@@ -495,7 +525,6 @@ function renderTokens(tokens) {
             body: JSON.stringify({ token, status: "premium", expired })
         });
 
-        // Simpan juga ke folder tokens
         await fetch(`${DB_BASE_URL}/tokens/${token}.json`, {
             method: 'PUT',
             headers: {'Content-Type': 'application/json'},
@@ -508,7 +537,7 @@ function renderTokens(tokens) {
         loadAllData();
     }
 
-    // --- LOGIKA FREE CLAIMS ---
+    // LOGIKA FREE CLAIMS
     function renderClaims(claims) {
         const tbody = document.getElementById("claimsTableBody");
         tbody.innerHTML = "";
@@ -543,7 +572,40 @@ function renderTokens(tokens) {
         loadAllData();
     }
 
-    // --- FUNGSI HAPUS NODE ---
+    // LOGIKA CHATS / KOMENTAR MEMBER
+    function renderChats(chats) {
+        const tbody = document.getElementById("chatTableBody");
+        tbody.innerHTML = "";
+        const keys = Object.keys(chats);
+
+        if (keys.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Tidak ada komentar tersimpan.</td></tr>`;
+            return;
+        }
+
+        keys.forEach(k => {
+            const item = chats[k];
+            tbody.innerHTML += `
+                <tr>
+                    <td style="font-weight:bold; color:#00f0ff;">👤 ${item.name}</td>
+                    <td>${item.message}</td>
+                    <td style="font-size:11px; color:#b0c4de;">${item.time}</td>
+                    <td style="text-align:center;">
+                        <button class="btn btn-danger" onclick="deleteNode('chats/${k}')">Hapus</button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    async function clearAllChats() {
+        if (!confirm("⚠️ Peringatan: Apakah Anda yakin ingin menghapus SELURUH komentar member?")) return;
+        await fetch(`${DB_BASE_URL}/chats.json`, { method: 'DELETE' });
+        showToast("Semua obrolan berhasil dibersihkan!");
+        loadAllData();
+    }
+
+    // FUNGSI HAPUS NODE GENERIK
     async function deleteNode(path) {
         if (!confirm(`Hapus data "${path}" dari Firebase?`)) return;
         await fetch(`${DB_BASE_URL}/${path}.json`, { method: 'DELETE' });
