@@ -308,6 +308,18 @@
             </div>
         </div>
     </div>
+    
+    <div class="panel">
+        <h3>🔌 Saklar Web Utama (index2)</h3>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <span>Status Website:</span>
+            <select id="webStatusSelect" style="width: auto; padding: 8px 15px;">
+                <option value="online">🟢 ONLINE (Buka)</option>
+                <option value="offline">🔴 OFFLINE / MAINTENANCE (Tutup)</option>
+            </select>
+            <button class="btn" onclick="updateWebStatus()">Simpan Status</button>
+        </div>
+    </div>
 
     <!-- TAB 2: KELOLA BUYERS -->
     <div id="buyersTab" class="tab-content">
@@ -406,6 +418,36 @@
         t.className = "show";
         setTimeout(() => { t.className = ""; }, 2500);
     }
+    // Memuat status saklar saat Web Admin dibuka
+    async function loadWebStatus() {
+        try {
+            const res = await fetch(`${DB_BASE_URL}/settings/status.json`);
+            const status = await res.json();
+            if (status) {
+                document.getElementById("webStatusSelect").value = status;
+            }
+        } catch (e) {
+            console.error("Gagal memuat status saklar:", e);
+        }
+    }
+
+    // Menyimpan status saklar ke Firebase saat tombol diklik
+    async function updateWebStatus() {
+        const newStatus = document.getElementById("webStatusSelect").value;
+        try {
+            await fetch(`${DB_BASE_URL}/settings/status.json`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(newStatus)
+            });
+            showToast("Status saklar berhasil diperbarui!");
+        } catch (e) {
+            alert("Gagal memperbarui status saklar.");
+        }
+    }
+
+    // Panggil loadWebStatus saat halaman dimuat
+    window.addEventListener('load', loadWebStatus);
 
     function switchTab(tabId, evt) {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -613,7 +655,11 @@
         loadAllData();
     }
 
-    window.onload = loadAllData;
+    window.onload = function() {
+        loadAllData();
+        loadWebStatus();
+    };
+
 </script>
 
 </body>
