@@ -19,9 +19,14 @@
         .panel { background: rgba(3, 15, 30, 0.85); border: 1px solid rgba(0, 240, 255, 0.3); border-radius: 15px; padding: 20px; margin-bottom: 20px; }
         .panel h3 { color: #00f0ff; margin-bottom: 15px; font-size: 18px; }
         .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; }
-        @media(max-width: 768px) { .form-grid { grid-template-columns: 1fr; } }
-        input, select { width: 100%; padding: 12px; background: rgba(3, 7, 18, 0.9); border: 1px solid rgba(0, 240, 255, 0.4); border-radius: 8px; color: white; font-size: 14px; outline: none; }
-        .btn { background: rgba(0, 240, 255, 0.2); border: 1px solid #00f0ff; color: white; padding: 12px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .config-grid { display: grid; grid-template-columns: 80px 1fr 2fr 100px; gap: 10px; align-items: center; margin-bottom: 10px; }
+        @media(max-width: 768px) { 
+            .form-grid { grid-template-columns: 1fr; } 
+            .config-grid { grid-template-columns: 1fr; gap: 5px; background: rgba(0,240,255,0.03); padding: 10px; border-radius: 8px; margin-bottom: 15px; }
+        }
+        input, select, textarea { width: 100%; padding: 12px; background: rgba(3, 7, 18, 0.9); border: 1px solid rgba(0, 240, 255, 0.4); border-radius: 8px; color: white; font-size: 14px; outline: none; }
+        input:focus, select:focus, textarea:focus { border-color: #00f0ff; box-shadow: 0 0 8px rgba(0, 240, 255, 0.4); }
+        .btn { background: rgba(0, 240, 255, 0.2); border: 1px solid #00f0ff; color: white; padding: 12px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s; }
         .btn:hover { background: rgba(0, 240, 255, 0.5); }
         .btn-danger { background: rgba(255, 0, 0, 0.2); border-color: #ff4444; color: #ff4444; padding: 6px 12px; font-size: 12px; }
         .btn-danger:hover { background: rgba(255, 0, 0, 0.5); color: white; }
@@ -53,6 +58,7 @@
         <div class="tab-btn" onclick="switchTab('buyersTab', event)">👤 Kelola Buyers</div>
         <div class="tab-btn" onclick="switchTab('claimsTab', event)">📱 Kelola Free Claims</div>
         <div class="tab-btn" onclick="switchTab('chatsTab', event)">💬 Kelola Chats</div>
+        <div class="tab-btn" onclick="switchTab('configTab', event)">⚙️ Kelola UI & Config</div>
     </div>
 
     <!-- SAKLAR CONTROL FITUR FREE CLAIM -->
@@ -154,12 +160,69 @@
             </div>
         </div>
     </div>
+
+    <!-- TAB 5: UI_CONFIG & VERSION INFO -->
+    <div id="configTab" class="tab-content">
+        <div class="panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 style="margin:0;">🎨 Editor "ui_config" & "version_info"</h3>
+                <button class="btn" onclick="saveUIConfig()">💾 Simpan Semua Konfigurasi</button>
+            </div>
+
+            <!-- HEADER TITLE -->
+            <div style="margin-bottom: 20px;">
+                <label style="font-size: 12px; color: #00f0ff; font-weight: bold; display: block; margin-bottom: 5px;">Header Title App:</label>
+                <input type="text" id="configHeaderTitle" placeholder="Contoh: ZEE STORE">
+            </div>
+
+            <!-- VERSION INFO -->
+            <div style="background: rgba(0, 240, 255, 0.05); border: 1px solid rgba(0, 240, 255, 0.2); padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                <h4 style="color: #00f0ff; font-size: 15px; margin-bottom: 10px;">📦 Info Versi Script (version_info)</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                    <div>
+                        <label style="font-size: 11px; color: #b0c4de;">Versi Terbaru (latestVersion):</label>
+                        <input type="number" step="0.1" id="configLatestVersion" placeholder="1.1">
+                    </div>
+                    <div>
+                        <label style="font-size: 11px; color: #b0c4de;">Changelog Update:</label>
+                        <input type="text" id="configChangelog" placeholder="Deskripsi pembaruan">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label style="font-size: 11px; color: #b0c4de;">Download URL Free:</label>
+                        <input type="text" id="configDownloadFree" placeholder="https://...">
+                    </div>
+                    <div>
+                        <label style="font-size: 11px; color: #b0c4de;">Download URL Premium:</label>
+                        <input type="text" id="configDownloadPremium" placeholder="https://...">
+                    </div>
+                </div>
+            </div>
+
+            <!-- UI CONFIG ITEMS (ICONS, LABELS, VISIBLE) -->
+            <h4 style="color: #00f0ff; font-size: 15px; margin-bottom: 10px;">🎛️ Pengaturan Item Menu UI (ui_config)</h4>
+            <div style="display: grid; grid-template-columns: 80px 1fr 2fr 100px; gap: 10px; font-weight: bold; color: #00f0ff; font-size: 12px; margin-bottom: 8px;">
+                <div>Icon</div>
+                <div>Key ID</div>
+                <div>Label Menu</div>
+                <div>Status Tampil</div>
+            </div>
+            
+            <div id="uiItemsContainer">
+                <p style="text-align: center; font-size: 12px; color: #b0c4de;">Memuat item UI...</p>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <div id="toast">Berhasil disimpan!</div>
 
 <script>
     const DB_BASE_URL = "https://token-pengguna-default-rtdb.asia-southeast1.firebasedatabase.app";
+    let cachedUIConfig = {};
+    let cachedVersionInfo = {};
 
     function showToast(msg) {
         const t = document.getElementById("toast");
@@ -212,6 +275,10 @@
             renderBuyers(data.buyers || {});
             renderClaims(data.free_claims || {});
             renderChats(data.chats || {});
+            
+            cachedUIConfig = data.ui_config || {};
+            cachedVersionInfo = data.version_info || {};
+            renderUIConfigEditor(cachedUIConfig, cachedVersionInfo);
         } catch (e) {
             document.getElementById("connectionStatus").textContent = "● Gagal Koneksi";
             document.getElementById("connectionStatus").style.color = "#ff4444";
@@ -310,6 +377,104 @@
         await fetch(`${DB_BASE_URL}/${path}.json`, { method: 'DELETE' });
         showToast("Data terhapus!");
         loadAllData();
+    }
+
+    // --- LOGIKA FORM EDIT UI_CONFIG & VERSION_INFO ---
+    function renderUIConfigEditor(uiConfig, versionInfo) {
+        document.getElementById("configHeaderTitle").value = uiConfig.header_title || "";
+        document.getElementById("configLatestVersion").value = versionInfo.latestVersion || 1.0;
+        document.getElementById("configChangelog").value = versionInfo.changelog || "";
+        document.getElementById("configDownloadFree").value = versionInfo.downloadUrlFree || "";
+        document.getElementById("configDownloadPremium").value = versionInfo.downloadUrlPremium || "";
+
+        const container = document.getElementById("uiItemsContainer");
+        container.innerHTML = "";
+
+        const labels = uiConfig.labels || {};
+        const icons = uiConfig.icons || {};
+        const visible = uiConfig.visible || {};
+
+        const keys = Object.keys(labels);
+        if (keys.length === 0) {
+            container.innerHTML = `<p style="text-align:center; font-size:12px; color:#b0c4de;">Tidak ada item ui_config.</p>`;
+            return;
+        }
+
+        keys.forEach(key => {
+            const iconVal = icons[key] || "⚙️";
+            const labelVal = labels[key] || "";
+            const isVisible = visible[key] !== false;
+
+            container.innerHTML += `
+                <div class="config-grid">
+                    <input type="text" id="icon_${key}" value="${iconVal}" style="text-align:center;">
+                    <div style="font-weight:bold; font-size:12px; color:#00f0ff; word-break:break-all;">${key}</div>
+                    <input type="text" id="label_${key}" value="${labelVal}">
+                    <select id="visible_${key}">
+                        <option value="true" ${isVisible ? 'selected' : ''}>🟢 Tampil</option>
+                        <option value="false" ${!isVisible ? 'selected' : ''}>🔴 Sembunyi</option>
+                    </select>
+                </div>
+            `;
+        });
+    }
+
+    async function saveUIConfig() {
+        const headerTitle = document.getElementById("configHeaderTitle").value.trim();
+        const latestVersion = parseFloat(document.getElementById("configLatestVersion").value) || 1.0;
+        const changelog = document.getElementById("configChangelog").value.trim();
+        const downloadUrlFree = document.getElementById("configDownloadFree").value.trim();
+        const downloadUrlPremium = document.getElementById("configDownloadPremium").value.trim();
+
+        const labels = cachedUIConfig.labels || {};
+        const newIcons = {};
+        const newLabels = {};
+        const newVisible = {};
+
+        Object.keys(labels).forEach(key => {
+            const iconElem = document.getElementById(`icon_${key}`);
+            const labelElem = document.getElementById(`label_${key}`);
+            const visibleElem = document.getElementById(`visible_${key}`);
+
+            if (iconElem && labelElem && visibleElem) {
+                newIcons[key] = iconElem.value.trim();
+                newLabels[key] = labelElem.value.trim();
+                newVisible[key] = visibleElem.value === "true";
+            }
+        });
+
+        const updatedUIConfig = {
+            header_title: headerTitle,
+            icons: newIcons,
+            labels: newLabels,
+            visible: newVisible
+        };
+
+        const updatedVersionInfo = {
+            changelog: changelog,
+            downloadUrlFree: downloadUrlFree,
+            downloadUrlPremium: downloadUrlPremium,
+            latestVersion: latestVersion
+        };
+
+        try {
+            await fetch(`${DB_BASE_URL}/ui_config.json`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(updatedUIConfig)
+            });
+
+            await fetch(`${DB_BASE_URL}/version_info.json`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(updatedVersionInfo)
+            });
+
+            showToast("Konfigurasi UI & Versi berhasil disimpan!");
+            loadAllData();
+        } catch (e) {
+            alert("Gagal menyimpan konfigurasi ke Firebase.");
+        }
     }
 
     window.onload = function() {
