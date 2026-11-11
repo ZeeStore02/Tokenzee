@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -89,7 +90,10 @@
             </div>
         </div>
         <div class="panel">
-            <h3>📋 Daftar Node /tokens/</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
+                <h3 style="margin:0;">📋 Daftar Node /tokens/</h3>
+                <button class="btn btn-danger" onclick="cleanupExpiredTokens()">🧹 Hapus Token Expired</button>
+            </div>
             <div class="table-container">
                 <table>
                     <thead>
@@ -113,7 +117,10 @@
             </div>
         </div>
         <div class="panel">
-            <h3>🛒 Daftar Node /buyers/</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
+                <h3 style="margin:0;">🛒 Daftar Node /buyers/</h3>
+                <button class="btn btn-danger" onclick="cleanupExpiredBuyers()">🧹 Hapus Buyer Expired</button>
+            </div>
             <div class="table-container">
                 <table>
                     <thead>
@@ -290,9 +297,13 @@
         tbody.innerHTML = "";
         const keys = Object.keys(tokens);
         if (keys.length === 0) { tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Tidak ada token.</td></tr>`; return; }
+        
+        const today = new Date().toISOString().split('T')[0];
         keys.forEach(k => {
             const item = tokens[k];
-            tbody.innerHTML += `<tr><td style="font-weight:bold; color:#00f0ff;">${k}</td><td><span class="badge ${item.status}">${item.status.toUpperCase()}</span></td><td>${item.expired}</td><td style="text-align:center;"><button class="btn btn-danger" onclick="deleteNode('tokens/${k}')">Hapus</button></td></tr>`;
+            const isExpired = item.expired && item.expired < today;
+            const expiredDisplay = isExpired ? `<span style="color:#ff4444; font-weight:bold;">${item.expired} (Expired)</span>` : item.expired;
+            tbody.innerHTML += `<tr><td style="font-weight:bold; color:#00f0ff;">${k}</td><td><span class="badge ${item.status}">${item.status.toUpperCase()}</span></td><td>${expiredDisplay}</td><td style="text-align:center;"><button class="btn btn-danger" onclick="deleteNode('tokens/${k}')">Hapus</button></td></tr>`;
         });
     }
 
@@ -311,14 +322,42 @@
         loadAllData();
     }
 
+    async function cleanupExpiredTokens() {
+        if (!confirm("Hapus SEMUA token yang tanggal expirednya sudah lewat dari hari ini?")) return;
+        try {
+            const res = await fetch(`${DB_BASE_URL}/tokens.json`);
+            const tokens = await res.json();
+            if (!tokens) { showToast("Tidak ada token."); return; }
+
+            const today = new Date().toISOString().split('T')[0];
+            let deletedCount = 0;
+
+            for (const [key, item] of Object.entries(tokens)) {
+                if (item.expired && item.expired < today) {
+                    await fetch(`${DB_BASE_URL}/tokens/${key}.json`, { method: 'DELETE' });
+                    deletedCount++;
+                }
+            }
+
+            showToast(`Berhasil membersihkan ${deletedCount} token expired!`);
+            loadAllData();
+        } catch (e) {
+            alert("Gagal membersihkan token expired.");
+        }
+    }
+
     function renderBuyers(buyers) {
         const tbody = document.getElementById("buyerTableBody");
         tbody.innerHTML = "";
         const keys = Object.keys(buyers);
         if (keys.length === 0) { tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;">Tidak ada pembeli.</td></tr>`; return; }
+        
+        const today = new Date().toISOString().split('T')[0];
         keys.forEach(k => {
             const item = buyers[k];
-            tbody.innerHTML += `<tr><td style="font-weight:bold; color:#00f0ff;">${k}</td><td>${item.token || '-'}</td><td><span class="badge ${item.status || 'premium'}">${(item.status || 'PREMIUM').toUpperCase()}</span></td><td>${item.expired}</td><td style="text-align:center;"><button class="btn btn-danger" onclick="deleteNode('buyers/${k}')">Hapus</button></td></tr>`;
+            const isExpired = item.expired && item.expired < today;
+            const expiredDisplay = isExpired ? `<span style="color:#ff4444; font-weight:bold;">${item.expired} (Expired)</span>` : item.expired;
+            tbody.innerHTML += `<tr><td style="font-weight:bold; color:#00f0ff;">${k}</td><td>${item.token || '-'}</td><td><span class="badge ${item.status || 'premium'}">${(item.status || 'PREMIUM').toUpperCase()}</span></td><td>${expiredDisplay}</td><td style="text-align:center;"><button class="btn btn-danger" onclick="deleteNode('buyers/${k}')">Hapus</button></td></tr>`;
         });
     }
 
@@ -334,6 +373,30 @@
         document.getElementById("buyerNameInput").value = "";
         document.getElementById("buyerTokenInput").value = "";
         loadAllData();
+    }
+
+    async function cleanupExpiredBuyers() {
+        if (!confirm("Hapus SEMUA data buyer yang tanggal expirednya sudah lewat dari hari ini?")) return;
+        try {
+            const res = await fetch(`${DB_BASE_URL}/buyers.json`);
+            const buyers = await res.json();
+            if (!buyers) { showToast("Tidak ada buyer."); return; }
+
+            const today = new Date().toISOString().split('T')[0];
+            let deletedCount = 0;
+
+            for (const [key, item] of Object.entries(buyers)) {
+                if (item.expired && item.expired < today) {
+                    await fetch(`${DB_BASE_URL}/buyers/${key}.json`, { method: 'DELETE' });
+                    deletedCount++;
+                }
+            }
+
+            showToast(`Berhasil membersihkan ${deletedCount} buyer expired!`);
+            loadAllData();
+        } catch (e) {
+            alert("Gagal membersihkan buyer expired.");
+        }
     }
 
     function renderClaims(claims) {
@@ -379,7 +442,6 @@
         loadAllData();
     }
 
-    // --- LOGIKA FORM EDIT UI_CONFIG & VERSION_INFO ---
     function renderUIConfigEditor(uiConfig, versionInfo) {
         document.getElementById("configHeaderTitle").value = uiConfig.header_title || "";
         document.getElementById("configLatestVersion").value = versionInfo.latestVersion || 1.0;
@@ -394,28 +456,35 @@
         const icons = uiConfig.icons || {};
         const visible = uiConfig.visible || {};
 
-        const keys = Object.keys(labels);
-        if (keys.length === 0) {
-            container.innerHTML = `<p style="text-align:center; font-size:12px; color:#b0c4de;">Tidak ada item ui_config.</p>`;
-            return;
-        }
+        const orderedKeys = [
+            "quick", "inject", "timeskip", "kda", "setting_savage", "drone",
+            "maphack", "nograss", "bypass", "reset", "setting", "usage",
+            "setting_mode", "setting_damage", "setting_add", "setting_delete",
+            "setting_urutkan", "setting_import", "log", "update", "token"
+        ];
 
-        keys.forEach(key => {
-            const iconVal = icons[key] || "⚙️";
-            const labelVal = labels[key] || "";
-            const isVisible = visible[key] !== false;
+        Object.keys(labels).forEach(k => {
+            if (!orderedKeys.includes(k)) orderedKeys.push(k);
+        });
 
-            container.innerHTML += `
-                <div class="config-grid">
-                    <input type="text" id="icon_${key}" value="${iconVal}" style="text-align:center;">
-                    <div style="font-weight:bold; font-size:12px; color:#00f0ff; word-break:break-all;">${key}</div>
-                    <input type="text" id="label_${key}" value="${labelVal}">
-                    <select id="visible_${key}">
-                        <option value="true" ${isVisible ? 'selected' : ''}>🟢 Tampil</option>
-                        <option value="false" ${!isVisible ? 'selected' : ''}>🔴 Sembunyi</option>
-                    </select>
-                </div>
-            `;
+        orderedKeys.forEach(key => {
+            if (labels[key] !== undefined || icons[key] !== undefined) {
+                const iconVal = icons[key] || "⚙️";
+                const labelVal = labels[key] || "";
+                const isVisible = visible[key] !== false;
+
+                container.innerHTML += `
+                    <div class="config-grid">
+                        <input type="text" id="icon_${key}" value="${iconVal}" style="text-align:center;">
+                        <div style="font-weight:bold; font-size:12px; color:#00f0ff; word-break:break-all;">${key}</div>
+                        <input type="text" id="label_${key}" value="${labelVal}">
+                        <select id="visible_${key}">
+                            <option value="true" ${isVisible ? 'selected' : ''}>🟢 Tampil</option>
+                            <option value="false" ${!isVisible ? 'selected' : ''}>🔴 Sembunyi</option>
+                        </select>
+                    </div>
+                `;
+            }
         });
     }
 
@@ -431,7 +500,18 @@
         const newLabels = {};
         const newVisible = {};
 
-        Object.keys(labels).forEach(key => {
+        const orderedKeys = [
+            "quick", "inject", "timeskip", "kda", "setting_savage", "drone", 
+            "maphack", "nograss", "bypass", "reset", "setting", "usage", 
+            "setting_mode", "setting_damage", "setting_add", "setting_delete", 
+            "setting_urutkan", "setting_import", "log", "update", "token"
+        ];
+        
+        Object.keys(labels).forEach(k => {
+            if (!orderedKeys.includes(k)) orderedKeys.push(k);
+        });
+
+        orderedKeys.forEach(key => {
             const iconElem = document.getElementById(`icon_${key}`);
             const labelElem = document.getElementById(`label_${key}`);
             const visibleElem = document.getElementById(`visible_${key}`);
