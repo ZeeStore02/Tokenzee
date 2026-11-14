@@ -227,7 +227,6 @@
 <div id="toast">Berhasil disimpan!</div>
 
 <script>
-    // Hapus trailing slash agar tidak terjadi double slash (//) saat digabung dengan path
     const DB_BASE_URL = "https://keypengguna-default-rtdb.asia-southeast1.firebasedatabase.app";
     let cachedUIConfig = {};
     let cachedVersionInfo = {};
@@ -239,19 +238,39 @@
         setTimeout(() => { t.className = ""; }, 3000);
     }
 
-    // Helper untuk memvalidasi apakah Firebase benar-benar menerima request (tidak 401/403/400)
+    // Helper request Firebase yang aman dari blokir CORS Android & Cache
     async function firebaseRequest(path, method = 'GET', bodyData = null) {
         const cleanPath = path.startsWith('/') ? path : `/${path}`;
+        const cacheBuster = method === 'GET' ? `?t=${Date.now()}` : '';
+        const url = `${DB_BASE_URL}${cleanPath}${cacheBuster}`;
+
         const options = {
-            method: method,
-            headers: { 'Content-Type': 'application/json' }
+            method: method === 'GET' ? 'GET' : 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
         };
-        if (bodyData !== null) {
-            options.body = JSON.stringify(bodyData);
+
+        // Gunakan X-HTTP-Method-Override untuk PUT/PATCH/DELETE agar lolos preflight CORS di HP
+        if (method !== 'GET') {
+            options.headers['X-HTTP-Method-Override'] = method;
         }
 
-        const res = await fetch(`${DB_BASE_URL}${cleanPath}`, options);
-        const data = await res.json();
+        if (bodyData !== null) {
+            options.body = JSON.stringify(bodyData);
+        } else if (method === 'DELETE') {
+            options.body = JSON.stringify(null);
+        }
+
+        const res = await fetch(url, options);
+        const rawText = await res.text();
+        let data = null;
+
+        try {
+            data = rawText ? JSON.parse(rawText) : null;
+        } catch (e) {
+            data = rawText;
+        }
 
         if (!res.ok) {
             const errMsg = (data && data.error) ? data.error : `HTTP Error ${res.status}`;
@@ -276,8 +295,9 @@
         try {
             await firebaseRequest('/settings/free_claim_status.json', 'PUT', newStatus);
             showToast("Status Klaim Free berhasil diperbarui!");
+            await loadFreeClaimStatus();
         } catch (e) {
-            alert(`Gagal menyimpan ke Firebase: ${e.message}\n\nPastikan Rules Firebase mengizinkan write: true.`);
+            alert(`Gagal menyimpan ke Firebase: ${e.message}`);
         }
     }
 
@@ -330,7 +350,6 @@
         const expired = document.getElementById("expiredInput").value;
         if (!name || !expired) return alert("Isi semua form token!");
 
-        // Validasi karakter terlarang pada key Firebase (. $ # [ ] /)
         if (/[.#$\[\]\/]/.test(name)) {
             return alert("Nama token tidak boleh mengandung karakter . # $ [ ] atau /");
         }
@@ -339,7 +358,7 @@
             await firebaseRequest(`/tokens/${encodeURIComponent(name)}.json`, 'PUT', { status, expired });
             showToast("Token berhasil disimpan ke Firebase!");
             document.getElementById("tokenInput").value = "";
-            loadAllData();
+            await loadAllData();
         } catch (e) {
             alert(`Gagal menyimpan token: ${e.message}`);
         }
@@ -362,7 +381,7 @@
             }
 
             showToast(`Berhasil membersihkan ${deletedCount} token expired!`);
-            loadAllData();
+            await loadAllData();
         } catch (e) {
             alert(`Gagal membersihkan token expired: ${e.message}`);
         }
@@ -399,7 +418,7 @@
             showToast("Buyer & Token berhasil disimpan ke Firebase!");
             document.getElementById("buyerNameInput").value = "";
             document.getElementById("buyerTokenInput").value = "";
-            loadAllData();
+            await loadAllData();
         } catch (e) {
             alert(`Gagal menyimpan buyer: ${e.message}`);
         }
@@ -422,7 +441,7 @@
             }
 
             showToast(`Berhasil membersihkan ${deletedCount} buyer expired!`);
-            loadAllData();
+            await loadAllData();
         } catch (e) {
             alert(`Gagal membersihkan buyer expired: ${e.message}`);
         }
@@ -444,7 +463,7 @@
         try {
             await firebaseRequest('/free_claims.json', 'DELETE');
             showToast("Semua data klaim berhasil direset!");
-            loadAllData();
+            await loadAllData();
         } catch (e) {
             alert(`Gagal mereset klaim: ${e.message}`);
         }
@@ -466,7 +485,7 @@
         try {
             await firebaseRequest('/chats.json', 'DELETE');
             showToast("Semua obrolan berhasil dibersihkan!");
-            loadAllData();
+            await loadAllData();
         } catch (e) {
             alert(`Gagal menghapus chat: ${e.message}`);
         }
@@ -477,7 +496,7 @@
         try {
             await firebaseRequest(`/${path}.json`, 'DELETE');
             showToast("Data terhapus dari Firebase!");
-            loadAllData();
+            await loadAllData();
         } catch (e) {
             alert(`Gagal menghapus data: ${e.message}`);
         }
@@ -587,9 +606,9 @@
             await firebaseRequest('/version_info.json', 'PATCH', updatedVersionInfo);
 
             showToast("Konfigurasi UI & Versi berhasil disimpan ke Firebase!");
-            loadAllData();
+            await loadAllData();
         } catch (e) {
-            alert(`Gagal menyimpan konfigurasi ke Firebase: ${e.message}\n\nCek tab Rules di Firebase Console Anda.`);
+            alert(`Gagal menyimpan konfigurasi ke Firebase: ${e.message}`);
         }
     }
 
@@ -598,5 +617,6 @@
         loadFreeClaimStatus();
     };
 </script>
+
 </body>
 </html>
