@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -40,6 +39,7 @@
         .badge.free { background: rgba(176, 196, 222, 0.15); border: 1px solid #b0c4de; color: #b0c4de; }
         #toast { visibility: hidden; min-width: 250px; background-color: #00f0ff; color: #030712; text-align: center; border-radius: 8px; padding: 12px; position: fixed; z-index: 9999; left: 50%; bottom: 30px; transform: translateX(-50%); font-weight: bold; }
         #toast.show { visibility: visible; animation: fadeInOut 2.5s; }
+        #toast.error { background-color: #ff4444; color: #ffffff; }
         @keyframes fadeInOut { 0% { opacity: 0; bottom: 10px; } 20% { opacity: 1; bottom: 30px; } 80% { opacity: 1; bottom: 30px; } 100% { opacity: 0; bottom: 10px; } }
     </style>
 </head>
@@ -227,21 +227,42 @@
 <div id="toast">Berhasil disimpan!</div>
 
 <script>
-    const DB_BASE_URL = "https://token-pengguna-default-rtdb.asia-southeast1.firebasedatabase.app";
+    // Hapus trailing slash agar tidak terjadi double slash (//) saat digabung dengan path
+    const DB_BASE_URL = "https://keypengguna-default-rtdb.asia-southeast1.firebasedatabase.app";
     let cachedUIConfig = {};
     let cachedVersionInfo = {};
 
-    function showToast(msg) {
+    function showToast(msg, isError = false) {
         const t = document.getElementById("toast");
         t.textContent = msg;
-        t.className = "show";
-        setTimeout(() => { t.className = ""; }, 2500);
+        t.className = isError ? "show error" : "show";
+        setTimeout(() => { t.className = ""; }, 3000);
+    }
+
+    // Helper untuk memvalidasi apakah Firebase benar-benar menerima request (tidak 401/403/400)
+    async function firebaseRequest(path, method = 'GET', bodyData = null) {
+        const cleanPath = path.startsWith('/') ? path : `/${path}`;
+        const options = {
+            method: method,
+            headers: { 'Content-Type': 'application/json' }
+        };
+        if (bodyData !== null) {
+            options.body = JSON.stringify(bodyData);
+        }
+
+        const res = await fetch(`${DB_BASE_URL}${cleanPath}`, options);
+        const data = await res.json();
+
+        if (!res.ok) {
+            const errMsg = (data && data.error) ? data.error : `HTTP Error ${res.status}`;
+            throw new Error(errMsg);
+        }
+        return data;
     }
 
     async function loadFreeClaimStatus() {
         try {
-            const res = await fetch(`${DB_BASE_URL}/settings/free_claim_status.json`);
-            const status = await res.json();
+            const status = await firebaseRequest('/settings/free_claim_status.json');
             if (status) {
                 document.getElementById("freeClaimStatusSelect").value = status;
             }
@@ -253,14 +274,10 @@
     async function updateFreeClaimStatus() {
         const newStatus = document.getElementById("freeClaimStatusSelect").value;
         try {
-            await fetch(`${DB_BASE_URL}/settings/free_claim_status.json`, {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(newStatus)
-            });
+            await firebaseRequest('/settings/free_claim_status.json', 'PUT', newStatus);
             showToast("Status Klaim Free berhasil diperbarui!");
         } catch (e) {
-            alert("Gagal memperbarui status saklar.");
+            alert(`Gagal menyimpan ke Firebase: ${e.message}\n\nPastikan Rules Firebase mengizinkan write: true.`);
         }
     }
 
@@ -273,8 +290,7 @@
 
     async function loadAllData() {
         try {
-            const res = await fetch(`${DB_BASE_URL}/.json`);
-            const data = await res.json() || {};
+            const data = (await firebaseRequest('/.json')) || {};
             document.getElementById("connectionStatus").textContent = "● Terhubung ke Firebase";
             document.getElementById("connectionStatus").style.color = "#25D366";
 
@@ -287,7 +303,7 @@
             cachedVersionInfo = data.version_info || {};
             renderUIConfigEditor(cachedUIConfig, cachedVersionInfo);
         } catch (e) {
-            document.getElementById("connectionStatus").textContent = "● Gagal Koneksi";
+            document.getElementById("connectionStatus").textContent = `● Gagal Koneksi (${e.message})`;
             document.getElementById("connectionStatus").style.color = "#ff4444";
         }
     }
@@ -301,9 +317,10 @@
         const today = new Date().toISOString().split('T')[0];
         keys.forEach(k => {
             const item = tokens[k];
+            const statusText = (item.status || 'free').toUpperCase();
             const isExpired = item.expired && item.expired < today;
-            const expiredDisplay = isExpired ? `<span style="color:#ff4444; font-weight:bold;">${item.expired} (Expired)</span>` : item.expired;
-            tbody.innerHTML += `<tr><td style="font-weight:bold; color:#00f0ff;">${k}</td><td><span class="badge ${item.status}">${item.status.toUpperCase()}</span></td><td>${expiredDisplay}</td><td style="text-align:center;"><button class="btn btn-danger" onclick="deleteNode('tokens/${k}')">Hapus</button></td></tr>`;
+            const expiredDisplay = isExpired ? `<span style="color:#ff4444; font-weight:bold;">${item.expired} (Expired)</span>` : (item.expired || '-');
+            tbody.innerHTML += `<tr><td style="font-weight:bold; color:#00f0ff;">${k}</td><td><span class="badge ${item.status || 'free'}">${statusText}</span></td><td>${expiredDisplay}</td><td style="text-align:center;"><button class="btn btn-danger" onclick="deleteNode('tokens/${k}')">Hapus</button></td></tr>`;
         });
     }
 
@@ -313,20 +330,25 @@
         const expired = document.getElementById("expiredInput").value;
         if (!name || !expired) return alert("Isi semua form token!");
 
-        await fetch(`${DB_BASE_URL}/tokens/${name}.json`, {
-            method: 'PUT', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ status, expired })
-        });
-        showToast("Token berhasil disimpan!");
-        document.getElementById("tokenInput").value = "";
-        loadAllData();
+        // Validasi karakter terlarang pada key Firebase (. $ # [ ] /)
+        if (/[.#$\[\]\/]/.test(name)) {
+            return alert("Nama token tidak boleh mengandung karakter . # $ [ ] atau /");
+        }
+
+        try {
+            await firebaseRequest(`/tokens/${encodeURIComponent(name)}.json`, 'PUT', { status, expired });
+            showToast("Token berhasil disimpan ke Firebase!");
+            document.getElementById("tokenInput").value = "";
+            loadAllData();
+        } catch (e) {
+            alert(`Gagal menyimpan token: ${e.message}`);
+        }
     }
 
     async function cleanupExpiredTokens() {
         if (!confirm("Hapus SEMUA token yang tanggal expirednya sudah lewat dari hari ini?")) return;
         try {
-            const res = await fetch(`${DB_BASE_URL}/tokens.json`);
-            const tokens = await res.json();
+            const tokens = await firebaseRequest('/tokens.json');
             if (!tokens) { showToast("Tidak ada token."); return; }
 
             const today = new Date().toISOString().split('T')[0];
@@ -334,7 +356,7 @@
 
             for (const [key, item] of Object.entries(tokens)) {
                 if (item.expired && item.expired < today) {
-                    await fetch(`${DB_BASE_URL}/tokens/${key}.json`, { method: 'DELETE' });
+                    await firebaseRequest(`/tokens/${encodeURIComponent(key)}.json`, 'DELETE');
                     deletedCount++;
                 }
             }
@@ -342,7 +364,7 @@
             showToast(`Berhasil membersihkan ${deletedCount} token expired!`);
             loadAllData();
         } catch (e) {
-            alert("Gagal membersihkan token expired.");
+            alert(`Gagal membersihkan token expired: ${e.message}`);
         }
     }
 
@@ -356,7 +378,7 @@
         keys.forEach(k => {
             const item = buyers[k];
             const isExpired = item.expired && item.expired < today;
-            const expiredDisplay = isExpired ? `<span style="color:#ff4444; font-weight:bold;">${item.expired} (Expired)</span>` : item.expired;
+            const expiredDisplay = isExpired ? `<span style="color:#ff4444; font-weight:bold;">${item.expired} (Expired)</span>` : (item.expired || '-');
             tbody.innerHTML += `<tr><td style="font-weight:bold; color:#00f0ff;">${k}</td><td>${item.token || '-'}</td><td><span class="badge ${item.status || 'premium'}">${(item.status || 'PREMIUM').toUpperCase()}</span></td><td>${expiredDisplay}</td><td style="text-align:center;"><button class="btn btn-danger" onclick="deleteNode('buyers/${k}')">Hapus</button></td></tr>`;
         });
     }
@@ -367,19 +389,26 @@
         const expired = document.getElementById("buyerExpiredInput").value;
         if (!name || !token || !expired) return alert("Isi semua form buyer!");
 
-        await fetch(`${DB_BASE_URL}/buyers/${name}.json`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ token, status: "premium", expired }) });
-        await fetch(`${DB_BASE_URL}/tokens/${token}.json`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ status: "premium", expired }) });
-        showToast("Buyer & Token berhasil disimpan!");
-        document.getElementById("buyerNameInput").value = "";
-        document.getElementById("buyerTokenInput").value = "";
-        loadAllData();
+        if (/[.#$\[\]\/]/.test(name) || /[.#$\[\]\/]/.test(token)) {
+            return alert("Nama buyer dan token tidak boleh mengandung karakter . # $ [ ] atau /");
+        }
+
+        try {
+            await firebaseRequest(`/buyers/${encodeURIComponent(name)}.json`, 'PUT', { token, status: "premium", expired });
+            await firebaseRequest(`/tokens/${encodeURIComponent(token)}.json`, 'PUT', { status: "premium", expired });
+            showToast("Buyer & Token berhasil disimpan ke Firebase!");
+            document.getElementById("buyerNameInput").value = "";
+            document.getElementById("buyerTokenInput").value = "";
+            loadAllData();
+        } catch (e) {
+            alert(`Gagal menyimpan buyer: ${e.message}`);
+        }
     }
 
     async function cleanupExpiredBuyers() {
         if (!confirm("Hapus SEMUA data buyer yang tanggal expirednya sudah lewat dari hari ini?")) return;
         try {
-            const res = await fetch(`${DB_BASE_URL}/buyers.json`);
-            const buyers = await res.json();
+            const buyers = await firebaseRequest('/buyers.json');
             if (!buyers) { showToast("Tidak ada buyer."); return; }
 
             const today = new Date().toISOString().split('T')[0];
@@ -387,7 +416,7 @@
 
             for (const [key, item] of Object.entries(buyers)) {
                 if (item.expired && item.expired < today) {
-                    await fetch(`${DB_BASE_URL}/buyers/${key}.json`, { method: 'DELETE' });
+                    await firebaseRequest(`/buyers/${encodeURIComponent(key)}.json`, 'DELETE');
                     deletedCount++;
                 }
             }
@@ -395,7 +424,7 @@
             showToast(`Berhasil membersihkan ${deletedCount} buyer expired!`);
             loadAllData();
         } catch (e) {
-            alert("Gagal membersihkan buyer expired.");
+            alert(`Gagal membersihkan buyer expired: ${e.message}`);
         }
     }
 
@@ -412,9 +441,13 @@
 
     async function clearAllClaims() {
         if (!confirm("Hapus SEMUA riwayat klaim device?")) return;
-        await fetch(`${DB_BASE_URL}/free_claims.json`, { method: 'DELETE' });
-        showToast("Semua data klaim berhasil direset!");
-        loadAllData();
+        try {
+            await firebaseRequest('/free_claims.json', 'DELETE');
+            showToast("Semua data klaim berhasil direset!");
+            loadAllData();
+        } catch (e) {
+            alert(`Gagal mereset klaim: ${e.message}`);
+        }
     }
 
     function renderChats(chats) {
@@ -430,16 +463,24 @@
 
     async function clearAllChats() {
         if (!confirm("Hapus SELURUH komentar member?")) return;
-        await fetch(`${DB_BASE_URL}/chats.json`, { method: 'DELETE' });
-        showToast("Semua obrolan berhasil dibersihkan!");
-        loadAllData();
+        try {
+            await firebaseRequest('/chats.json', 'DELETE');
+            showToast("Semua obrolan berhasil dibersihkan!");
+            loadAllData();
+        } catch (e) {
+            alert(`Gagal menghapus chat: ${e.message}`);
+        }
     }
 
     async function deleteNode(path) {
         if (!confirm(`Hapus data "${path}" dari Firebase?`)) return;
-        await fetch(`${DB_BASE_URL}/${path}.json`, { method: 'DELETE' });
-        showToast("Data terhapus!");
-        loadAllData();
+        try {
+            await firebaseRequest(`/${path}.json`, 'DELETE');
+            showToast("Data terhapus dari Firebase!");
+            loadAllData();
+        } catch (e) {
+            alert(`Gagal menghapus data: ${e.message}`);
+        }
     }
 
     function renderUIConfigEditor(uiConfig, versionInfo) {
@@ -496,6 +537,7 @@
         const downloadUrlPremium = document.getElementById("configDownloadPremium").value.trim();
 
         const labels = cachedUIConfig.labels || {};
+        const icons = cachedUIConfig.icons || {};
         const newIcons = {};
         const newLabels = {};
         const newVisible = {};
@@ -508,6 +550,9 @@
         ];
         
         Object.keys(labels).forEach(k => {
+            if (!orderedKeys.includes(k)) orderedKeys.push(k);
+        });
+        Object.keys(icons).forEach(k => {
             if (!orderedKeys.includes(k)) orderedKeys.push(k);
         });
 
@@ -538,22 +583,13 @@
         };
 
         try {
-            await fetch(`${DB_BASE_URL}/ui_config.json`, {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(updatedUIConfig)
-            });
+            await firebaseRequest('/ui_config.json', 'PATCH', updatedUIConfig);
+            await firebaseRequest('/version_info.json', 'PATCH', updatedVersionInfo);
 
-            await fetch(`${DB_BASE_URL}/version_info.json`, {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(updatedVersionInfo)
-            });
-
-            showToast("Konfigurasi UI & Versi berhasil disimpan!");
+            showToast("Konfigurasi UI & Versi berhasil disimpan ke Firebase!");
             loadAllData();
         } catch (e) {
-            alert("Gagal menyimpan konfigurasi ke Firebase.");
+            alert(`Gagal menyimpan konfigurasi ke Firebase: ${e.message}\n\nCek tab Rules di Firebase Console Anda.`);
         }
     }
 
